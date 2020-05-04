@@ -83,11 +83,66 @@ d <- d %>%
   nest() %>% 
   mutate(mod = map(data, ~ estimate_v("white", "hispanic_latino", data = .x)))
 
-d$mod[[2]]
+v <- d %>% 
+  select(-data) %>% 
+  unnest(mod)
+head(v)
+```
+
+(10 points) The plot below shows the achievement gap estimate for one school district across years. Produce a similar plot to the below for each of the first 100 school districts. Make sure you don’t miss the caption noting the number of schools in the district.
+
+```{r}
+dists <- unique(v$district)[1:100]
+
+dp <- v %>% 
+  filter(district %in% dists)
+
+# first try district Adrian SD 61
+
+dp %>% 
+  filter(district == "Adrian SD 61") %>% 
+ggplot(aes(academic_year, v)) + 
+  geom_point() +
+  geom_line(aes(x = as.numeric(as.factor(academic_year)))) +
+  geom_errorbar(aes(ymin = v - v_se, ymax = v + v_se), color = "grey") +
+  geom_hline(yintercept = 0,
+             color = "red") +
+  labs(x = "School year",
+       y = "Average Achievement Difference (SD Unites)", 
+       title = "Achievement Gap Estimates: Adrian SD 61 District",
+      subtitle = "Negative values indicate White students have higher average achievement\n Positive values indicate Hispanic/Latino students have higher average achievement",
+       caption = "Note: District includes 3 schools") +
+  theme_minimal()
 
 ```
 
-```{r}
+HINTS
 
+You don’t have to use a loop to create the file names (maybe give {glue} a try? Otherwise paste or paste0 will work fine).
+When working with the code, limit the number of plots you’re saving to, say, the first five to make sure it works before running it on all plots.
+
+```{r}
+# plot for all districts
+library(glue)
+
+p <- d %>% 
+  group_by(district) %>% 
+  nest() %>% 
+  mutate(plot = map2(data, district, ~
+      ggplot(.x, aes(academic_year, v)) +
+      geom_point() +
+  geom_line(aes(x = as.numeric(as.factor(academic_year)))) +
+  geom_errorbar(aes(ymin = v - v_se, ymax = v + v_se), color = "grey") +
+  geom_hline(yintercept = 0,
+             color = "red") +
+    labs(x = "School year",
+       y = "Average Achievement Difference (SD Unites)",
+      title = glue("Achievement Gap Estimates: {.y}"), 
+      subtitle = "Negative values indicate White students have higher average achievement\n Positive values indicate Hispanic/Latino students have higher average achievement",
+       caption = "Note: District includes 3 schools") +
+  theme_minimal()
+      ))
+
+p$plot[[1]]
 ```
 
