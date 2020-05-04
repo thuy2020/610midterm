@@ -2,7 +2,9 @@
 title: "Midterm"
 author: "Thuy Nguyen"
 date: "4/22/2020"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -35,7 +37,7 @@ Remove any row that has missing data in any of the n variables
 
 data <- map_df(15:18, download_file)
 
-d <- data %>% 
+data <- data %>% 
   clean_names() %>% 
   filter(student_group == "White" |
         student_group == "Hispanic/Latino") %>% 
@@ -45,14 +47,14 @@ d <- data %>%
             names_prefix = "number_level_",
             values_to = "n") %>% 
   drop_na(n) 
-head(d)
+head(data)
 ```
 
 2. (10 points) Collapse (sum) the n across grades and school for each district within each academic year, student group, and level. At the same time, calulate the number of schools (unique schools listed) for each district. Also move your data to a wider format where the student groups become new columns, filled by the district n. Remove districts that did not report numbers for one or both student groups (i.e., drop missing data from the new columns). Your data frame should look like the below
 
 ```{r}
 
-d <- d %>% 
+d1 <- data %>% 
   group_by(district) %>% # how to retain column n_school from here?
   mutate(n_school = length(unique(school))) %>% 
   group_by(academic_year, district, student_group, n_school, level) %>% 
@@ -78,14 +80,13 @@ library(gapr)
 # ashland_middle_g6 <- oregon_schools[1:4, ]
 # estimate_v(ashland_middle_g6, "white", "hispanic_latino")
 
-d <- d %>% 
+v <- d1 %>% 
   group_by(academic_year, district) %>% 
   nest() %>% 
-  mutate(mod = map(data, ~ estimate_v("white", "hispanic_latino", data = .x)))
-
-v <- d %>% 
+  mutate(mod = map(data, ~ estimate_v("white", "hispanic_latino", data = .x))) %>%  
   select(-data) %>% 
   unnest(mod)
+
 head(v)
 ```
 
@@ -93,6 +94,7 @@ head(v)
 
 ```{r}
 dists <- unique(v$district)[1:100]
+
 
 dp <- v %>% 
   filter(district %in% dists)
@@ -122,10 +124,10 @@ You don’t have to use a loop to create the file names (maybe give {glue} a try
 When working with the code, limit the number of plots you’re saving to, say, the first five to make sure it works before running it on all plots.
 
 ```{r}
-# plot for all districts
+# plots for all districts with changes in title
 library(glue)
 
-p <- d %>% 
+p <- dp %>% 
   group_by(district) %>% 
   nest() %>% 
   mutate(plot = map2(data, district, ~
@@ -143,6 +145,62 @@ p <- d %>%
   theme_minimal()
       ))
 
-p$plot[[1]]
+p$plot[[6]]
+
+# plots with changes in caption
+
+# need to get the data with n_school
+dp 
+d2 <- d1 %>% 
+  distinct(district)
+dp_nschool <- left_join(dp, d2)
+
+# creat new columns for titles and captions
+
+dp_nschool <- dp_nschool %>% 
+  mutate(label_title = glue("Achievement Gap Estimates: {str_to_title(district)}")) %>% 
+  mutate(label_cap = glue("Note: District includes {str_to_title(n_school)} schools")) 
+  
+# add to plot 
+all_plot <- dp_nschool %>% 
+  group_by(district, label_title, label_cap) %>%
+  nest() %>%
+  mutate(plot = pmap(list(district, label_cap, label_title, data),
+  ~ggplot(..4, aes(academic_year, v)) +
+      geom_point() +
+      geom_line(aes(x = as.numeric(as.factor(academic_year)))) +
+      geom_errorbar(aes(ymin = v - v_se, ymax = v + v_se), color = "grey") +
+      geom_hline(yintercept = 0,
+             color = "red") +
+      labs(x = "School year",
+       y = "Average Achievement Difference (SD Unites)",
+      title = ..3, 
+      subtitle = "Negative values indicate White students have higher average achievement\n Positive values indicate Hispanic/Latino students have higher average achievement",
+       caption = ..2) +
+  theme_minimal()
+      ))
+
+all_plot$plot[[20]]
+
+# sorry I couldn't find the lecture you showed hoe to insert color to the sub title
+```
+
+
+(10 points) Save the plots into a “plots” directory. Make sure the file names are meaningful.
+
+```{r}
+# save plots
+fs::dir_create(here::here("plots", "first100districts"))
+files <- str_replace_all(tolower(all_plot$district), " ", "-")
+paths <- here::here("plots", "first100districts", glue("{files}.png"))
+paths
+
+walk2(paths, all_plot$plot, ggsave,
+      width = 9.5, 
+      height = 6.5,
+      dpi = 500)
+
+# Not sure why it gives me a new folder 610midterm_cache when i knit
+
 ```
 
